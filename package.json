@@ -1,0 +1,30 @@
+{
+  "name": "mcp-websearch",
+  "version": "1.0.0",
+  "description": "MCP server for web search using DuckDuckGo",
+  "type": "module",
+  "main": "server.js",
+  "bin": {
+    "mcp-websearch": "./server.js"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "web-search",
+    "duckduckgo",
+    "copilot"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "node-fetch": "^3.3.2",
+    "cheerio": "^1.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
