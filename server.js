@@ -10,32 +10,40 @@ import fetch from "node-fetch";
 import * as cheerio from "cheerio";
 
 /**
- * DuckDuckGo HTML 검색 수행 및 결과 파싱
+ * Bing HTML 검색 수행 및 결과 파싱
  * @param {string} query - 검색어
  * @param {number} count - 최대 결과 수
  * @returns {Promise<Array>} 검색 결과 배열
  */
-async function searchDuckDuckGo(query, count = 5) {
-  const url = `https://duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+async function searchBing(query, count = 5) {
+  const url = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
   
   try {
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
       }
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
     
     const html = await response.text();
     const $ = cheerio.load(html);
     const results = [];
 
-    $('.result__body').each((i, elem) => {
+    // Bing 검색 결과 파싱
+    $('.b_algo').each((i, elem) => {
       if (i >= count) return false;
       
       const $elem = $(elem);
-      const title = $elem.find('.result__title').text().trim();
-      const link = $elem.find('.result__url').attr('href');
-      const snippet = $elem.find('.result__snippet').text().trim();
+      const $title = $elem.find('h2 a');
+      const title = $title.text().trim();
+      const link = $title.attr('href');
+      const snippet = $elem.find('.b_caption p, .b_caption').first().text().trim();
       
       if (title && link) {
         results.push({
@@ -48,7 +56,84 @@ async function searchDuckDuckGo(query, count = 5) {
 
     return results;
   } catch (error) {
-    throw new Error(`검색 실패: ${error.message}`);
+    throw new Error(`Bing 검색 실패: ${error.message}`);
+  }
+}
+
+/**
+ * Brave Search HTML 검색 수행 및 결과 파싱 (폴백용)
+ * @param {string} query - 검색어
+ * @param {number} count - 최대 결과 수
+ * @returns {Promise<Array>} 검색 결과 배열
+ */
+async function searchBrave(query, count = 5) {
+  const url = `https://search.brave.com/search?q=${encodeURIComponent(query)}`;
+  
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    
+    const html = await response.text();
+    const $ = cheerio.load(html);
+    const results = [];
+
+    // Brave Search 검색 결과 파싱
+    $('.snippet').each((i, elem) => {
+      if (i >= count) return false;
+      
+      const $elem = $(elem);
+      const $title = $elem.find('.snippet-title');
+      const title = $title.text().trim();
+      const link = $elem.find('.result-header').attr('href');
+      const snippet = $elem.find('.snippet-description').text().trim();
+      
+      if (title && link) {
+        results.push({
+          title,
+          link,
+          snippet: snippet || '설명 없음'
+        });
+      }
+    });
+
+    return results;
+  } catch (error) {
+    throw new Error(`Brave Search 실패: ${error.message}`);
+  }
+}
+
+/**
+ * 웹 검색 수행 (Bing 메인, Brave 폴백)
+ * @param {string} query - 검색어
+ * @param {number} count - 최대 결과 수
+ * @returns {Promise<Array>} 검색 결과 배열
+ */
+async function webSearch(query, count = 5) {
+  // 먼저 Bing 시도
+  try {
+    const results = await searchBing(query, count);
+    if (results.length > 0) {
+      return results;
+    }
+  } catch (error) {
+    console.error('Bing 검색 실패, Brave Search로 폴백:', error.message);
+  }
+  
+  // Bing 실패 시 Brave Search 시도
+  try {
+    const results = await searchBrave(query, count);
+    return results;
+  } catch (error) {
+    throw new Error(`모든 검색 엔진 실패: ${error.message}`);
   }
 }
 
@@ -93,7 +178,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
     tools: [
       {
         name: "web.search",
-        description: "DuckDuckGo를 사용하여 웹 검색을 수행합니다.",
+        description: "Bing을 사용하여 웹 검색을 수행합니다. (폴백: Brave Search)",
         inputSchema: {
           type: "object",
           properties: {
@@ -124,7 +209,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     try {
-      const results = await searchDuckDuckGo(q, count);
+      const results = await webSearch(q, count);
       const markdown = formatResultsAsMarkdown(results);
 
       return {
