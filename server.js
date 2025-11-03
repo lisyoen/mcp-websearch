@@ -8,6 +8,300 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import fetch from "node-fetch";
 import * as cheerio from "cheerio";
+import { HttpsProxyAgent } from "https-proxy-agent";
+
+// =============================================================================
+// 공통 유틸리티
+// =============================================================================
+
+/**
+ * 프록시 에이전트 생성 (HTTP_PROXY/HTTPS_PROXY 환경 변수 감지)
+ */
+function createProxyAgent() {
+  const proxy = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+  if (proxy) {
+    console.error(`프록시 감지: ${proxy}`);
+    return new HttpsProxyAgent(proxy);
+  }
+  return undefined;
+}
+
+/**
+ * URL 유효성 검증
+ */
+function validateUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('HTTP 또는 HTTPS 프로토콜만 지원됩니다.');
+    }
+    return parsed;
+  } catch (error) {
+    throw new Error(`잘못된 URL 형식입니다: ${error.message}`);
+  }
+}
+
+/**
+ * 안전한 텍스트 절단 (최대 길이 제한)
+ */
+function safeTruncate(text, maxLength = 100000) {
+  if (!text || text.length <= maxLength) {
+    return text;
+  }
+  return text.substring(0, maxLength) + '\n\n... (내용이 잘렸습니다)';
+}
+
+/**
+ * HTML에서 텍스트 추출 및 정규화
+ */
+function extractTextFromHtml(html, maxLength = 5000) {
+  const $ = cheerio.load(html);
+  
+  // 스크립트, 스타일 제거
+  $('script, style, noscript').remove();
+  
+  const title = $('title').text().trim();
+  const bodyText = $('body').text()
+    .replace(/\s+/g, ' ')  // 연속된 공백을 하나로
+    .trim();
+  
+  return {
+    title: title || '제목 없음',
+    text: safeTruncate(bodyText, maxLength)
+  };
+}
+
+/**
+ * HTTP 요청 공통 옵션
+ */
+function getDefaultFetchOptions(timeoutMs = 15000) {
+  const agent = createProxyAgent();
+  
+  return {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8'
+    },
+    agent,
+    timeout: timeoutMs,
+    signal: AbortSignal.timeout(timeoutMs)
+  };
+}
+
+// =============================================================================
+// 툴 구현: web.fetch, web.scrape, web.crawl
+// =============================================================================
+
+/**
+ * 단일 URL 가져오기 및 요약/원문 반환
+ */
+async function fetchUrl(url, mode = 'summary', timeoutMs = 15000) {
+  validateUrl(url);
+  
+  try {
+    const response = await fetch(url, getDefaultFetchOptions(timeoutMs));
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+    }
+    
+    const contentType = response.headers.get('content-type') || '';
+    const isHtml = contentType.includes('text/html');
+    
+    const body = await response.text();
+    
+    if (mode === 'raw' || !isHtml) {
+      // 원문 모드 또는 비-HTML
+      return {
+        url,
+        contentType,
+        content: safeTruncate(body, 100000)
+      };
+    }
+    
+    // HTML 요약 모드
+    const { title, text } = extractTextFromHtml(body);
+    
+    return {
+      url,
+      contentType,
+      title,
+      summary: text
+    };
+    
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(`타임아웃: ${timeoutMs}ms 내에 응답이 없습니다.`);
+    }
+    throw new Error(`URL 가져오기 실패: ${error.message}`);
+  }
+}
+
+/**
+ * fetchUrl 결과를 Markdown으로 포맷팅
+ */
+function formatFetchResult(result) {
+  let markdown = `# URL 가져오기 결과\n\n`;
+  markdown += `**URL:** ${result.url}\n`;
+  markdown += `**Content-Type:** ${result.contentType}\n\n`;
+  
+  if (result.title) {
+    markdown += `## ${result.title}\n\n`;
+    markdown += result.summary || '';
+  } else {
+    markdown += `## 내용\n\n\`\`\`\n${result.content}\n\`\`\`\n`;
+  }
+  
+  return markdown;
+}
+
+/**
+ * CSS 선택자로 요소 추출
+ */
+async function scrapeUrl(url, selector, attr = null, limit = 20) {
+  validateUrl(url);
+  
+  if (!selector || typeof selector !== 'string') {
+    throw new Error('selector는 필수 문자열입니다.');
+  }
+  
+  try {
+    const response = await fetch(url, getDefaultFetchOptions());
+    
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} - ${response.statusText}`);
+    }
+    
+    const html = await response.text();
+    const $ = cheerio.load(html);
+    
+    const results = [];
+    $(selector).each((i, elem) => {
+      if (i >= limit) return false;
+      
+      const $elem = $(elem);
+      
+      if (attr) {
+        // 속성 값 추출
+        const value = $elem.attr(attr);
+        if (value) {
+          results.push(value);
+        }
+      } else {
+        // 텍스트 추출
+        const text = $elem.text().trim();
+        if (text) {
+          results.push(text);
+        }
+      }
+    });
+    
+    return results;
+    
+  } catch (error) {
+    throw new Error(`스크랩 실패: ${error.message}`);
+  }
+}
+
+/**
+ * 지연 처리 (Promise)
+ */
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
+ * BFS 크롤링
+ */
+async function crawlUrl(startUrl, maxPages = 10, sameHostOnly = true, delayMs = 300, pattern = null) {
+  const startParsed = validateUrl(startUrl);
+  const startHost = startParsed.hostname;
+  
+  const visited = new Set();
+  const queue = [startUrl];
+  const results = [];
+  
+  const patternRegex = pattern ? new RegExp(pattern, 'i') : null;
+  
+  while (queue.length > 0 && results.length < maxPages) {
+    const currentUrl = queue.shift();
+    
+    if (visited.has(currentUrl)) continue;
+    visited.add(currentUrl);
+    
+    try {
+      const response = await fetch(currentUrl, getDefaultFetchOptions());
+      
+      if (!response.ok) {
+        console.error(`크롤 건너뜀 (HTTP ${response.status}): ${currentUrl}`);
+        continue;
+      }
+      
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('text/html')) {
+        console.error(`크롤 건너뜀 (비-HTML): ${currentUrl}`);
+        continue;
+      }
+      
+      const html = await response.text();
+      const $ = cheerio.load(html);
+      
+      // 페이지 정보 수집
+      const title = $('title').text().trim() || '제목 없음';
+      const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
+      const preview = safeTruncate(bodyText, 500);
+      
+      results.push({
+        url: currentUrl,
+        title,
+        preview
+      });
+      
+      // 링크 확장
+      if (results.length < maxPages) {
+        $('a[href]').each((i, elem) => {
+          try {
+            const href = $(elem).attr('href');
+            const absoluteUrl = new URL(href, currentUrl).href;
+            const parsedUrl = new URL(absoluteUrl);
+            
+            // 동일 호스트 필터
+            if (sameHostOnly && parsedUrl.hostname !== startHost) {
+              return;
+            }
+            
+            // 패턴 필터
+            if (patternRegex && !patternRegex.test(absoluteUrl)) {
+              return;
+            }
+            
+            // 중복 제거
+            if (!visited.has(absoluteUrl) && !queue.includes(absoluteUrl)) {
+              queue.push(absoluteUrl);
+            }
+          } catch (e) {
+            // 잘못된 URL 무시
+          }
+        });
+      }
+      
+      // 지연
+      if (delayMs > 0 && queue.length > 0) {
+        await delay(delayMs);
+      }
+      
+    } catch (error) {
+      console.error(`크롤 오류 (${currentUrl}): ${error.message}`);
+    }
+  }
+  
+  return results;
+}
+
+// =============================================================================
+// 기존 검색 함수들
+// =============================================================================
 
 /**
  * Bing HTML 검색 수행 및 결과 파싱
@@ -195,45 +489,172 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           required: ["q"],
         },
       },
+      {
+        name: "web.fetch",
+        description: "단일 URL을 가져와 HTML이면 제목/본문 요약을, 비-HTML이면 원문을 반환합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            url: {
+              type: "string",
+              description: "가져올 URL",
+            },
+            mode: {
+              type: "string",
+              description: "반환 모드: 'summary' (요약, 기본값) 또는 'raw' (원문)",
+              enum: ["summary", "raw"],
+              default: "summary",
+            },
+            timeoutMs: {
+              type: "number",
+              description: "타임아웃 (밀리초, 기본값: 15000)",
+              default: 15000,
+            },
+          },
+          required: ["url"],
+        },
+      },
+      {
+        name: "web.scrape",
+        description: "CSS 선택자로 웹 페이지에서 요소들을 추출합니다 (텍스트 또는 속성).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            url: {
+              type: "string",
+              description: "스크랩할 URL",
+            },
+            selector: {
+              type: "string",
+              description: "CSS 선택자 (예: 'article', '.content', '#main')",
+            },
+            attr: {
+              type: "string",
+              description: "추출할 속성 이름 (선택, 예: 'href'). 지정하지 않으면 텍스트 추출",
+            },
+            limit: {
+              type: "number",
+              description: "최대 결과 수 (기본값: 20)",
+              default: 20,
+            },
+          },
+          required: ["url", "selector"],
+        },
+      },
+      {
+        name: "web.crawl",
+        description: "동일 호스트 내에서 BFS로 링크를 따라가며 간단한 크롤링을 수행합니다.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            startUrl: {
+              type: "string",
+              description: "크롤링 시작 URL",
+            },
+            maxPages: {
+              type: "number",
+              description: "최대 페이지 수 (기본값: 10)",
+              default: 10,
+            },
+            sameHostOnly: {
+              type: "boolean",
+              description: "동일 호스트만 크롤 (기본값: true)",
+              default: true,
+            },
+            delayMs: {
+              type: "number",
+              description: "페이지 간 지연 시간 (밀리초, 기본값: 300)",
+              default: 300,
+            },
+            pattern: {
+              type: "string",
+              description: "URL에 포함되어야 할 정규식 패턴 (선택)",
+            },
+          },
+          required: ["startUrl"],
+        },
+      },
     ],
   };
 });
 
 // 툴 호출 처리
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  if (request.params.name === "web.search") {
-    const { q, count = 5 } = request.params.arguments;
+  const { name, arguments: args } = request.params;
 
-    if (!q || typeof q !== "string") {
-      throw new Error("검색어(q)는 필수 문자열입니다.");
+  try {
+    switch (name) {
+      case "web.search": {
+        const { q, count = 5 } = args;
+        if (!q || typeof q !== "string") {
+          throw new Error("검색어(q)는 필수 문자열입니다.");
+        }
+        const results = await webSearch(q, count);
+        const markdown = formatResultsAsMarkdown(results);
+        return {
+          content: [{ type: "text", text: markdown }],
+        };
+      }
+
+      case "web.fetch": {
+        const { url, mode = "summary", timeoutMs = 15000 } = args;
+        if (!url || typeof url !== "string") {
+          throw new Error("url은 필수 문자열입니다.");
+        }
+        const result = await fetchUrl(url, mode, timeoutMs);
+        const markdown = formatFetchResult(result);
+        return {
+          content: [{ type: "text", text: markdown }],
+        };
+      }
+
+      case "web.scrape": {
+        const { url, selector, attr, limit = 20 } = args;
+        if (!url || typeof url !== "string") {
+          throw new Error("url은 필수 문자열입니다.");
+        }
+        if (!selector || typeof selector !== "string") {
+          throw new Error("selector는 필수 문자열입니다.");
+        }
+        const results = await scrapeUrl(url, selector, attr, limit);
+        const output = JSON.stringify(results, null, 2);
+        return {
+          content: [{ 
+            type: "text", 
+            text: `# 스크랩 결과\n\n**URL:** ${url}\n**선택자:** ${selector}\n${attr ? `**속성:** ${attr}\n` : ''}**결과 수:** ${results.length}\n\n\`\`\`json\n${output}\n\`\`\`` 
+          }],
+        };
+      }
+
+      case "web.crawl": {
+        const { startUrl, maxPages = 10, sameHostOnly = true, delayMs = 300, pattern } = args;
+        if (!startUrl || typeof startUrl !== "string") {
+          throw new Error("startUrl은 필수 문자열입니다.");
+        }
+        const results = await crawlUrl(startUrl, maxPages, sameHostOnly, delayMs, pattern);
+        const output = JSON.stringify(results, null, 2);
+        return {
+          content: [{ 
+            type: "text", 
+            text: `# 크롤링 결과\n\n**시작 URL:** ${startUrl}\n**수집 페이지:** ${results.length}개\n\n\`\`\`json\n${output}\n\`\`\`` 
+          }],
+        };
+      }
+
+      default:
+        throw new Error(`알 수 없는 툴: ${name}`);
     }
-
-    try {
-      const results = await webSearch(q, count);
-      const markdown = formatResultsAsMarkdown(results);
-
-      return {
-        content: [
-          {
-            type: "text",
-            text: markdown,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `오류 발생: ${error.message}`,
-          },
-        ],
-        isError: true,
-      };
-    }
+  } catch (error) {
+    return {
+      content: [
+        {
+          type: "text",
+          text: `❌ 오류 발생: ${error.message}`,
+        },
+      ],
+      isError: true,
+    };
   }
-
-  throw new Error(`알 수 없는 툴: ${request.params.name}`);
 });
 
 // STDIO 전송 계층으로 서버 실행

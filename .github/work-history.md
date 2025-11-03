@@ -1,5 +1,97 @@
 # 작업 히스토리
 
+## 2025-11-04 작업 세션
+
+### 세션 20251104-001: URL 탐색 툴 추가 (web.fetch, web.scrape, web.crawl) ✅
+
+#### 완료된 작업들
+
+##### 1. 의존성 추가
+- `package.json`에 `https-proxy-agent` v7.0.4 추가
+- npm install 실행 완료
+
+##### 2. 공통 유틸리티 함수 구현
+- `createProxyAgent()`: HTTP_PROXY/HTTPS_PROXY 환경 변수 감지 및 프록시 에이전트 생성
+- `validateUrl()`: URL 유효성 검증 (http/https만 허용)
+- `safeTruncate()`: 텍스트 안전 절단 (기본 100KB 제한)
+- `extractTextFromHtml()`: HTML에서 제목/본문 추출 및 정규화
+- `getDefaultFetchOptions()`: HTTP 요청 공통 옵션 (프록시, 타임아웃, 헤더)
+
+##### 3. web.fetch 툴 구현
+- 단일 URL GET 요청
+- Content-Type 자동 감지 (HTML/비-HTML)
+- summary/raw 모드 지원
+- HTML 요약 모드: 제목 + 본문 5KB 프리뷰
+- 원문 모드: 100KB 제한
+- 타임아웃 처리 (기본 15초)
+- Markdown 포맷팅
+
+##### 4. web.scrape 툴 구현
+- CSS 선택자 기반 요소 추출
+- 텍스트 또는 속성(attr) 선택 가능
+- limit 파라미터로 결과 수 제한 (기본 20)
+- JSON 배열 형식 반환
+
+##### 5. web.crawl 툴 구현
+- BFS(Breadth-First Search) 알고리즘 기반 크롤링
+- 동일 호스트 필터링 (sameHostOnly)
+- 정규식 패턴 필터 (pattern)
+- 페이지 간 지연 처리 (delayMs, 기본 300ms)
+- 최대 페이지 수 제한 (maxPages, 기본 10)
+- 각 페이지의 제목 + 500자 프리뷰 수집
+- JSON 배열 형식 반환
+
+##### 6. MCP 서버 통합
+- ListToolsRequestSchema에 3개 툴 추가
+- CallToolRequestSchema 핸들러를 switch문으로 재구성
+- 에러 메시지 한국어화 및 사용자 친화적 개선
+- 모든 툴에 대한 입력 스키마 정의
+
+##### 7. 문서화
+- README.md 업데이트
+  - 주요 기능에 4개 툴 모두 명시
+  - 각 툴별 사용 예시 추가
+  - 파라미터 설명 상세화
+  - 환경 변수(프록시) 안내 추가
+
+##### 8. 테스트 및 검증
+- npm install 성공
+- server.js 실행 확인 (에러 없음)
+- ESLint/TypeScript 에러 체크 통과
+
+#### 주요 변경사항 및 결정 사항
+- **프록시 지원**: 회사 환경 대응을 위해 HTTP_PROXY/HTTPS_PROXY 자동 감지
+- **타임아웃 설정**: 모든 요청에 기본 15초 타임아웃 적용
+- **텍스트 절단**: 메모리 및 출력 크기 제한을 위한 safeTruncate 구현
+- **에러 핸들링**: 모든 에러에 사람 친화적인 한국어 메시지 제공
+- **BFS 크롤링**: 효율적인 탐색을 위해 큐 기반 알고리즘 선택
+
+#### 이슈 및 해결
+1. **파일 중복 작성**
+   - 문제: server.js 파일이 이중으로 작성됨
+   - 해결: Git에서 원본 복구 후 단계적으로 수정
+
+2. **AbortSignal.timeout 호환성**
+   - 문제: Node.js 버전에 따라 AbortSignal.timeout이 지원되지 않을 수 있음
+   - 해결: package.json에 Node.js >=20.0.0 요구사항 이미 명시됨
+
+#### 학습한 내용
+- MCP 툴 추가 시 ListToolsRequestSchema와 CallToolRequestSchema 모두 업데이트 필요
+- BFS 알고리즘을 이용한 효율적인 웹 크롤링 구현 방법
+- cheerio를 이용한 CSS 선택자 기반 스크랩핑
+- Node.js 프록시 에이전트 설정 방법
+- AbortSignal을 이용한 타임아웃 처리
+
+#### 변경된 파일 목록
+- `package.json` (의존성 추가)
+- `server.js` (유틸리티 + 3개 툴 추가)
+- `README.md` (사용 예시 추가)
+- `.github/sessions/session-20251104-001.md`
+- `.github/current-session.md`
+- `.github/session-manager.md`
+
+---
+
 ## 2025-11-03 작업 세션
 
 ### 세션 20251103-004: MCP Web Search 서버 구현 ✅
