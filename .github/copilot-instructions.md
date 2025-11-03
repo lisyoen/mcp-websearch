@@ -1,5 +1,19 @@
 # GitHub Copilot Instructions
 
+## 다른 프로젝트에서 이 지시사항 사용하기
+이 지시사항 시스템을 다른 프로젝트에서도 사용하려면:
+1. 이 프로젝트의 `.github/copilot-instructions.md` 파일을 새 프로젝트의 `.github/` 폴더로 복사
+2. `.github/.prompt.txt` 파일도 함께 복사
+3. 세션 관리 시스템을 사용하려면:
+   - `.github/session-manager.md` 복사
+   - `.github/current-session.md` 복사
+   - `.github/project-context.md` 복사
+   - `.github/work-history.md` 복사
+   - `.github/sessions/` 폴더 구조 생성
+4. 프로젝트별 특성에 맞게 내용 수정
+
+---
+
 git message 는 한국어로 생성해야 합니다.
 생각 내용도 한국어로 생성해야 합니다.
 

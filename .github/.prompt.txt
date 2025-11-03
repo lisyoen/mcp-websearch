@@ -1,5 +1,12 @@
 # MCP Websearch 프로젝트 지시사항
 
+## 지시사항 파일 복사 (다른 프로젝트에서 사용)
+이 프로젝트의 지시사항 시스템을 다른 프로젝트에서도 사용하려면:
+1. `.github/copilot-instructions.md` 파일을 새 프로젝트의 `.github/` 폴더로 복사
+2. `.github/.prompt.txt` 파일을 새 프로젝트의 `.github/` 폴더로 복사
+3. 세션 관리를 사용하려면 `.github/sessions/` 폴더 구조도 복사
+4. 필요에 따라 프로젝트별 지시사항을 수정하여 사용
+
 ## 정보 검색 원칙
 모르는 내용이 있으면 직접 웹 검색을 수행하여 정보를 찾습니다.
 - mcp_websearch_web_search 도구를 사용하여 필요한 정보를 검색
