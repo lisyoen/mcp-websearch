@@ -1,34 +1,31 @@
 # 현재 작업 세션
 
-**현재 세션 ID**: `session-20251103-005`
+**현재 세션 ID**: `session-20251103-006`
 
 ## 진행 중인 작업
-- DuckDuckGo 대체 검색 엔진 구현 (완료)
+- 지시사항 업데이트: 직접 웹 검색 기능 활성화
 
 ## 마지막 수행 단계
-1. 새 세션 시작 (session-20251103-005)
-2. 기존 프로젝트 구조 파악
-3. DuckDuckGo 차단 문제 확인
-4. Bing 검색 엔진 구현
-5. Brave Search 폴백 추가
-6. 테스트 및 검증 완료
-7. 문서 업데이트 완료
+1. 새 세션 시작 (session-20251103-006)
+2. `.github/.prompt.txt` 파일에 정보 검색 원칙 추가
+3. `.github/copilot-instructions.md`에서 ChatGPT 물어보기 제거
+4. mcp_websearch_web_search 도구로 직접 검색하도록 수정
 
 ## 다음에 해야 할 작업
-- [x] 대체 검색 엔진 조사 및 테스트
-- [x] 검색 엔진 차단 여부 테스트
-- [x] server.js 수정 (대체 검색 엔진으로 교체)
-- [x] 테스트 및 검증
-- [x] 문서 업데이트
-- [ ] Git 동기화
+- [x] `.github/.prompt.txt` 수정
+- [x] `.github/copilot-instructions.md` 수정
+- [x] 세션 파일 생성 및 업데이트
+- [x] session-manager.md 업데이트
+- [x] Git 동기화
 
 ## 현재 상태
 - 프로젝트: MCP Websearch
 - 위치: D:\git\mcp-websearch
 - 브랜치: main
-- 세션 ID: session-20251103-005
+- 세션 ID: session-20251103-006
 - 동기화 상태: 동기화 완료
 
 ## 세션 관련 파일
 - 세션 관리자: `.github/session-manager.md`
-- 현재 세션 상세: `.github/sessions/session-20251103-005.md`
+- 현재 세션 상세: `.github/sessions/session-20251103-006.md`
+
